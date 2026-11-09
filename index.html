@@ -701,11 +701,13 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 <div id="login">
   <form class="box" onsubmit="doLogin(event)">
     <h2 id="loginTitle">센터 관리 로그인</h2>
-    <div class="muted tiny">센터에 등록된 선생님 계정으로 로그인하세요.</div>
+    <div class="muted tiny" id="loginSub">센터에 등록된 선생님 계정으로 로그인하세요.</div>
     <label class="f">이메일<input type="email" id="lgEmail" autocomplete="username" required></label>
     <label class="f">비밀번호<input type="password" id="lgPw" autocomplete="current-password" required></label>
+    <label class="f" id="lgPw2Wrap" style="display:none">비밀번호 확인<input type="password" id="lgPw2" autocomplete="new-password"></label>
     <div id="loginMsg"></div>
-    <button class="btn pri" style="width:100%;margin-top:6px;padding:10px">로그인</button>
+    <button class="btn pri" id="lgBtn" style="width:100%;margin-top:6px;padding:10px">로그인</button>
+    <div class="tiny muted" style="margin-top:14px;text-align:center" id="lgSwitch">처음이신가요? <a href="#" onclick="setSignup(true);return false" style="color:var(--y4);font-weight:700">가입하기</a></div>
   </form>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -775,7 +777,20 @@ async function startApp(){
   setTimeout(autoGenerate,500);
 }
 function showLogin(msg){$('#login').classList.remove('off');$('#loginMsg').textContent=msg||''}
-async function doLogin(ev){ev.preventDefault();$('#loginMsg').textContent='';
+let signupMode=false;
+function setSignup(on){signupMode=on;$('#loginTitle').textContent=on?'선생님 가입':'센터 관리 로그인';
+  $('#loginSub').textContent=on?'센터 관리자가 설정에 등록해 둔 이메일로 가입할 수 있어요.':'센터에 등록된 선생님 계정으로 로그인하세요.';
+  $('#lgPw2Wrap').style.display=on?'':'none';$('#lgPw2').required=on;$('#lgBtn').textContent=on?'가입하기':'로그인';$('#lgPw').autocomplete=on?'new-password':'current-password';
+  $('#lgSwitch').innerHTML=on?'이미 계정이 있나요? <a href="#" onclick="setSignup(false);return false" style="color:var(--y4);font-weight:700">로그인</a>':'처음이신가요? <a href="#" onclick="setSignup(true);return false" style="color:var(--y4);font-weight:700">가입하기</a>';$('#loginMsg').textContent=''}
+async function doSignup(){const email=$('#lgEmail').value.trim().toLowerCase(),pw=$('#lgPw').value;
+  if(pw.length<6)return $('#loginMsg').textContent='비밀번호는 6자 이상으로 해주세요.';if(pw!==$('#lgPw2').value)return $('#loginMsg').textContent='두 비밀번호가 서로 달라요.';
+  const{data:ok,error:e1}=await sb.rpc('neulbom_is_invited',{e:email});if(e1)return $('#loginMsg').textContent='잠시 후 다시 시도해 주세요.';
+  if(!ok)return $('#loginMsg').textContent='아직 등록되지 않은 이메일이에요. 센터 관리자에게 설정 → 선생님 관리에 이메일 등록을 요청하세요.';
+  const{data,error}=await sb.auth.signUp({email,password:pw});
+  if(error)return $('#loginMsg').textContent=/registered|exists/i.test(error.message)?'이미 가입된 이메일이에요. 로그인해 주세요.':'가입하지 못했어요. 잠시 후 다시 시도해 주세요.';
+  if(!data.session){const r=await sb.auth.signInWithPassword({email,password:pw});if(r.error)return $('#loginMsg').textContent='이미 가입된 이메일이거나 확인이 필요해요. 로그인을 해보거나 관리자에게 문의하세요.';data.user=r.data.user}
+  $('#lgPw').value=$('#lgPw2').value='';setSignup(false);me=data.user;toast('가입했어요. 환영해요!');startApp()}
+async function doLogin(ev){ev.preventDefault();$('#loginMsg').textContent='';if(signupMode)return doSignup();
   const{data,error}=await sb.auth.signInWithPassword({email:$('#lgEmail').value.trim(),password:$('#lgPw').value});
   if(error){$('#loginMsg').textContent='이메일 또는 비밀번호가 맞지 않아요.';return}
   $('#lgPw').value='';me=data.user;startApp()}
